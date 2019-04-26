@@ -4,6 +4,7 @@ import os
 import time
 from argparse import ArgumentParser
 
+
 class RateCalculator(object):
     def __init__(self):
         self.prev_values = {}
@@ -20,12 +21,14 @@ class RateCalculator(object):
             self.prev_values[filename] = (t, val)
             self.rates[filename] = (val - prev_val)/(t - prev_t)
 
+
 def bignum2str(num):
-    for suffix in [' ','K','M','G','T','P','E','Z']:
+    for suffix in [' ', 'K', 'M', 'G', 'T', 'P', 'E', 'Z']:
         if abs(num) < 1000.0:
             return "{:.3f}{}".format(num, suffix)
         num /= 1000.0
     return "{:.3f}{}".format(num, "Y")
+
 
 def validate_measures(args):
     measures = []
@@ -36,7 +39,10 @@ def validate_measures(args):
         mul = float(params.get(2, 0))
         filename = "/sys/class/net/{}/statistics/{}".format(iface, stat)
         if not os.path.isfile(filename):
-            sys.stderr.write("Wrong measure '{}': file '{}' does not exist\n".format(measure, filename))
+            sys.stderr.write(
+                "Wrong measure '{}': file '{}' does not exist\n".format(
+                    measure, filename)
+            )
             continue
         measures.append((measure, filename, mul))
     return measures
@@ -44,9 +50,24 @@ def validate_measures(args):
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("-i","--interval", type=float, help="Measure interval in seconds, default is 1 second", default=1)
-    parser.add_argument("-c","--count", type=int, help="Exit after given number of measurements, no limit by default", default=0)
-    parser.add_argument("measures", nargs='+', help="List of measures in 'iface_name:stat_name:mul' format, for example eth0:rx_bytes:8")
+    parser.add_argument(
+        "-i", "--interval",
+        type=float,
+        help="Measure interval in seconds, default is 1 second",
+        default=1,
+    )
+    parser.add_argument(
+        "-c", "--count",
+        type=int,
+        help="Exit after given number of measurements, no limit by default",
+        default=0
+    )
+    parser.add_argument(
+        "measures",
+        nargs='+',
+        help="List of measures in 'iface_name:stat_name:mul' format, "
+             "for example eth0:rx_bytes:8",
+    )
     args = parser.parse_args()
 
     measures = validate_measures(args)
@@ -56,7 +77,13 @@ def main():
         return 0
     filenames = set((filename for _, filename, _ in measures))
 
-    sys.stdout.write("time     {}\n".format(" ".join(["{: >20}".format(measure) for measure,_,_ in measures])))
+    sys.stdout.write(
+        "time     {}\n".format(
+            " ".join([
+                "{: >20}".format(measure) for measure, _, _ in measures
+            ])
+        )
+    )
 
     rc = RateCalculator()
     num = 0
@@ -73,6 +100,7 @@ def main():
             sys.stdout.write(" ".join(columns) + "\n")
         num += 1
         time.sleep(args.interval)
+
 
 if __name__ == "__main__":
     try:
