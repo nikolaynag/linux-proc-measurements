@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+import os
+import sys
+import argparse
+import re
+
+if sys.version_info < (3, 0):
+    sys.stderr.write(
+        "Sorry, this script could not run with Python {}.{}, "
+        "Python 3.x is required\n".format(*sys.version_info))
+    sys.exit(1)
+
+
+def get_pid_cpu_timers(pid):
+    filename = "/proc/{:d}/stat".format(pid)
+    try:
+        with open(filename) as f:
+            line = f.read()
+    except FileNotFoundError:
+        panic(
+            "Error reading proc file '{}': process {:d} "
+            "does not exist".format(filename, pid)
+        )
+    values = line.split()
+    userHz = float(os.sysconf(os.sysconf_names["SC_CLK_TCK"]))
+    utime, stime, cutime, cstime = (
+        int(value)/userHz for value in values[14-1:18-1]
+    )
+    return utime, stime, cutime, cstime
+
+
+def find_pids(cmdlineRegexp):
+    cmdRe = re.compile(cmdlineRegexp)
+    pids = [int(pid) for pid in os.listdir("/proc") if pid.isdigit()]
+    found = []
+    for pid in pids:
+        if pid == os.getpid():
+            continue
+        try:
+            with open("/proc/{:d}/cmdline".format(pid)) as f:
+                cmdline = f.read().split("\0")
+        except FileNotFoundError:
+            continue
+        if cmdRe.search(" ".join(cmdline)) is None:
+            continue
+        found.append(pid)
+    return found
+
+
+def panic(msg):
+    sys.stderr.write(msg + "\n")
+    exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-d", "--delta-from",
+        help="Calculate delta from given set of CPU usage time values",
+        default=None,
+    )
+    outputFormatArgs = parser.add_mutually_exclusive_group()
+    outputFormatArgs.add_argument(
+        "-t", "--total",
+        help="Print total CPU usage time",
+        action="store_true",
+    )
+    outputFormatArgs.add_argument(
+        "-e", "--efficiency-for-amount",
+        help="Print CPU usage efficiency for given amount of work",
+        type=float,
+    )
+    selectProcessArgs = parser.add_mutually_exclusive_group(required=True)
+    selectProcessArgs.add_argument(
+        "-p", "--pid",
+        help="Do not search for target process, just use given PID",
+        type=int,
+    )
+    selectProcessArgs.add_argument(
+        "-c", "--cmdline-regexp",
+        help="Find process using given regexp of it's cmdline"
+    )
+    args = parser.parse_args()
+
+    # parse delta-from values
+    if args.delta_from is not None:
+        try:
+            prevValues = [float(v) for v in args.delta_from.split(",")]
+        except ValueError:
+            prevValues = []
+    else:
+        prevValues = [0.0]*4
+    if len(prevValues) != 4:
+        panic(
+            "Error parsing --delta-from argument. Please specify "
+            "4 comma-separated floating point values."
+        )
+
+    # find PID of target process
+    if args.pid is None:
+        pids = find_pids(args.cmdline_regexp)
+        if len(pids) > 1:
+            panic(
+                "Error selecting target process: {} processes meet given "
+                "cmdline filter '{}'".format(len(pids), args.cmdline_regexp)
+            )
+        elif len(pids) < 1:
+            panic(
+                "Error selecting taget process: no process meets given "
+                "cmdline filter '{}'".format(args.cmdline_regexp)
+            )
+        pid = pids[0]
+    else:
+        pid = args.pid
+
+    newValues = get_pid_cpu_timers(pid)
+    deltaValues = [
+        newValues[i] - prevValues[i]
+        for i in range(4)
+    ]
+    if args.total:
+        print("{:.2f}".format(sum(deltaValues)))
+    elif args.efficiency_for_amount is None:
+        print(",".join(("{:.2f}".format(v) for v in deltaValues)))
+    else:
+        print("{:.2f}".format(args.efficiency_for_amount/sum(deltaValues)))
+
+if __name__ == "__main__":
+    main()
