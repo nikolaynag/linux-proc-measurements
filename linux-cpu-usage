@@ -74,6 +74,12 @@ def main():
         "-c", "--cmdline-regexp",
         help="Find process using given regexp of it's cmdline"
     )
+    parser.add_argument(
+        "-m", "--multi-process",
+        help="Measure combined load from multiple processes matching given "
+             "cmdline regexp",
+        action="store_true"
+    )
     args = parser.parse_args()
 
     # parse delta-from values
@@ -93,7 +99,7 @@ def main():
     # find PID of target process
     if args.pid is None:
         pids = find_pids(args.cmdline_regexp)
-        if len(pids) > 1:
+        if len(pids) > 1 and not args.multi_process:
             panic(
                 "Error selecting target process: {} processes meet given "
                 "cmdline filter '{}'".format(len(pids), args.cmdline_regexp)
@@ -103,11 +109,14 @@ def main():
                 "Error selecting taget process: no process meets given "
                 "cmdline filter '{}'".format(args.cmdline_regexp)
             )
-        pid = pids[0]
     else:
-        pid = args.pid
+        pids = [args.pid]
 
-    newValues = get_pid_cpu_timers(pid)
+    newValues = [0.0]*4
+    for pid in pids:
+        for i in range(4):
+            newValues[i] += get_pid_cpu_timers(pid)[i]
+
     deltaValues = [
         newValues[i] - prevValues[i]
         for i in range(4)
